@@ -15,7 +15,6 @@ import retrofit2.http.Part;
 public interface FileUploadService
 {
     @Multipart
-    @POST("/upload")
-    Call<ResponseBody> upload(@Part("description") RequestBody description, @Part MultipartBody.Part file
-    );
+    @POST("storage/uploadFile")
+    Call<ResponseBody> upload(@Part("description") RequestBody description, @Part MultipartBody.Part file);
 }

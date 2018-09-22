@@ -18,11 +18,15 @@ import android.widget.Toast;
 import com.ipaulpro.afilechooser.utils.FileUtils;
 
 import java.io.File;
+import java.io.IOException;
 import java.net.URI;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.jar.Manifest;
 
 import okhttp3.MediaType;
 import okhttp3.MultipartBody;
+import okhttp3.OkHttpClient;
 import okhttp3.RequestBody;
 import okhttp3.ResponseBody;
 import retrofit2.Call;
@@ -57,48 +61,58 @@ public class MainActivity extends AppCompatActivity {
             public void onClick(View v) {
                 Intent i=new Intent();
                 i.setType("image/*");
+                i.putExtra(Intent.EXTRA_ALLOW_MULTIPLE,true);
                 i.setAction(Intent.ACTION_GET_CONTENT);
                 startActivityForResult(Intent.createChooser(i,"Select Picture"),PICK_IMAGE_FROM_GALLERY);
 
             }
         });
-//        setContentView(button);
 
     }
-
-//    private void showChooser()
-//    {
-//        // Use the GET_CONTENT intent from the utility class
-//        Intent target = FileUtils.createGetContentIntent();
-//        // Create the chooser Intent
-//        Intent intent = Intent.createChooser(target, getString(R.string.chooser_title));
-//        try
-//        {
-//            startActivityForResult(intent, MY_PERMISSION_REQUEST);
-//        } catch (ActivityNotFoundException e) {
-//            // The reason for the existence of aFileChooser
-//        }
-//    }
 
     private void uploadFile(Uri fileUri)
     {
         RequestBody descriptionPart=RequestBody.create(MultipartBody.FORM, "Hello how are you?????");
+        Log.e("Description",""+descriptionPart);
         File originalFile=FileUtils.getFile(MainActivity.this,fileUri);
-        RequestBody filePart=RequestBody.create(MediaType.parse(getContentResolver().getType(fileUri)),originalFile);
-        MultipartBody.Part file=MultipartBody.Part.createFormData("Photo",originalFile.getName(),filePart);
+        Log.e("Original File",""+originalFile);
+       // File originalFile=File.
 
-        Retrofit.Builder builder=new Retrofit.Builder().baseUrl("https://file-uploaders.herokuapp.com").addConverterFactory(GsonConverterFactory.create());
+        RequestBody filePart=RequestBody.create(MediaType.parse(getContentResolver().getType(fileUri)),originalFile);
+        Log.e("File Part",""+filePart);
+
+        //  RequestBody filePart=RequestBody.create(MediaType.parse("/image*"),originalFile);
+        MultipartBody.Part file=MultipartBody.Part.createFormData("file",originalFile.getName(),filePart);
+        Log.e("file",""+file);
+
+        OkHttpClient okHttpClient=new OkHttpClient.Builder()
+                .readTimeout(200, TimeUnit.SECONDS)
+                 .connectTimeout(10,TimeUnit.MINUTES)
+                 .build();
+
+        Retrofit.Builder builder=new Retrofit.Builder()
+                .baseUrl("https://fileuploader-test.herokuapp.com/")
+                .client(okHttpClient)
+                .addConverterFactory(GsonConverterFactory.create());
+
         Retrofit retrofit=builder.build();
+
         FileUploadService service=retrofit.create(FileUploadService.class);
 
         Call<ResponseBody> call = service.upload(descriptionPart, file);
+
         call.enqueue(new Callback<ResponseBody>() {
             @Override
             public void onResponse(Call<ResponseBody> call, Response<ResponseBody> response)
             {
                 Log.e("Url","=="+call.request().url());
-                Log.e("Upload", "success"+response.body());
-                Toast.makeText(MainActivity.this, ""+response.body(), Toast.LENGTH_SHORT).show();
+                try {
+                    Log.e("Upload", "="+response.body().string());
+                    Toast.makeText(MainActivity.this, ""+response.body().string(), Toast.LENGTH_SHORT).show();
+                }
+                catch (IOException e) {
+                    e.printStackTrace();
+                }
 
             }
 
@@ -112,23 +126,43 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
-        if(requestCode==PICK_IMAGE_FROM_GALLERY && resultCode==RESULT_OK && data!=null && data.getData() !=null)
+        Log.e("intent data",""+data);
+        if(requestCode==PICK_IMAGE_FROM_GALLERY && resultCode==RESULT_OK && data!=null)
         {
-            Uri uri= data.getData();
+            if(data.getClipData() !=null)
+            {
+                int count=data.getClipData().getItemCount();
+                Log.e("Count",""+count);
+                int currentItem=0;
+                while (currentItem<count)
+                {
+                    Uri uri=data.getClipData().getItemAt(currentItem).getUri();
+                    currentItem=currentItem+1;
+                    Log.e("CurrentItem","="+currentItem);
+                    Log.e("Uri selected","="+uri.toString());
+                    uploadFile(uri);
+                }
+            }
+            else if (data.getData() !=null)
+            {
+            Uri uri = data.getData();
             uploadFile(uri);
+        }
 
         }
     }
 
     @Override
-    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
-        switch (requestCode){
+    public void onRequestPermissionsResult(int requestCode,  String[] permissions,  int[] grantResults) {
+        switch (requestCode)
+        {
             case MY_PERMISSION_REQUEST:{
-                if(grantResults.length>0 && grantResults[0]==PackageManager.PERMISSION_GRANTED){
+                if(grantResults.length>0 && grantResults[0]==PackageManager.PERMISSION_GRANTED)
+                {
                     Toast.makeText(this, "Request Access", Toast.LENGTH_SHORT).show();
-                }else{
+                }else
+                {
                     Toast.makeText(this, "Request denied", Toast.LENGTH_SHORT).show();
-
                 }
                 break;
             }
